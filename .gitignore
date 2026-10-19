@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Downloads and temporary files, in case the download folder is set inside the project
+downloads/
+*.part
+
+# Never commit login sessions or exported cookies
+session.json
+cookies.txt
+*cookies*.txt
+*cookies*.json
