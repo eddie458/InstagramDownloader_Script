@@ -2,7 +2,8 @@ import json
 import unittest
 import urllib.parse
 
-from igdl.api import (Checkpoint, InstagramAPI, LoginRequired, NotFound, RateLimited, SessionExpired)
+from igdl.api import (LOGGED_OUT_DELAY, Checkpoint, InstagramAPI, LoginRequired, NotFound, RateLimited,
+                      SessionExpired)
 from igdl.net import HttpClient, NetworkError, Response
 
 from tests import samples
@@ -115,6 +116,24 @@ class ErrorTests(unittest.TestCase):
                                      logged_in=True)
         self.assertEqual(api.stories_tray(), [])
         self.assertEqual(len(http.requests), 2)
+
+
+class PacingTests(unittest.TestCase):
+    # make_api uses a 0-0 second delay setting, so any wait comes from the pacing rules themselves.
+
+    def test_logged_out_requests_are_always_spaced_out(self):
+        api, _, sleeps = make_api([])
+        for _ in range(3):
+            api._throttle()
+        self.assertEqual(len(sleeps), 2)
+        for wait in sleeps:
+            self.assertTrue(LOGGED_OUT_DELAY[0] - 1 < wait <= LOGGED_OUT_DELAY[1], wait)
+
+    def test_logged_in_allows_a_few_quick_requests(self):
+        api, _, sleeps = make_api([], logged_in=True)
+        for _ in range(3):
+            api._throttle()
+        self.assertEqual(sleeps, [])
 
 
 class FeedTests(unittest.TestCase):

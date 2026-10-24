@@ -116,6 +116,21 @@ class BatchTests(unittest.TestCase):
         saved = list(Path(self.tmp.name).glob("failed_links_*.txt"))
         self.assertEqual(saved[0].read_text(encoding="utf-8").split(), [urls[1]])
 
+    def test_two_empty_results_in_a_row_logged_out_stops_the_batch(self):
+        urls = [f"https://www.instagram.com/p/{code}/" for code in
+                ("AAAAA11111", "BBBBB22222", "CCCCC33333", "DDDDD44444")]
+        output = self.run_batch(urls, {"AAAAA11111": NotFound("empty"), "BBBBB22222": NotFound("empty")})
+        self.assertEqual(self.app.api.requested, ["AAAAA11111", "BBBBB22222"])
+        self.assertIn("Two posts in a row came back empty", output)
+        saved = list(Path(self.tmp.name).glob("failed_links_*.txt"))
+        self.assertEqual(saved[0].read_text(encoding="utf-8").split(), urls)
+
+    def test_a_success_resets_the_empty_results_count(self):
+        urls = [f"https://www.instagram.com/p/{code}/" for code in
+                ("AAAAA11111", "BBBBB22222", "CCCCC33333", "DDDDD44444")]
+        self.run_batch(urls, {"AAAAA11111": NotFound("empty"), "CCCCC33333": NotFound("empty")})
+        self.assertEqual(self.app.api.requested, ["AAAAA11111", "BBBBB22222", "CCCCC33333", "DDDDD44444"])
+
     def test_rate_limit_stops_the_batch(self):
         urls = [f"https://www.instagram.com/p/{code}/" for code in ("AAAAA11111", "BBBBB22222", "CCCCC33333")]
         output = self.run_batch(urls, {"BBBBB22222": RateLimited("slow down")})
@@ -240,6 +255,43 @@ class LoggedInFlowTests(unittest.TestCase):
         self.assertIn("carousel", csv_text)
         self.app.download_saved(medias, cli.DownloadOptions())
         self.assertEqual([post.shortcode for post in self.recorder.posts], ["Cabc123XYZ_", "Creel456ABC"])
+
+
+class LoginTests(unittest.TestCase):
+    SESSIONID = "1234567890%3Aabc%3A1"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.env = mock.patch.dict(os.environ, {"IGDL_HOME": self.tmp.name})
+        self.env.start()
+        self.app = cli.App(Settings(output_dir=self.tmp.name), interactive=False)
+
+    def tearDown(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def test_login_is_saved_when_instagram_is_limiting_requests(self):
+        self.app.api.current_user = mock.Mock(side_effect=RateLimited("slow down"))
+        with redirect_stdout(io.StringIO()) as output:
+            self.app.finish_login({"sessionid": self.SESSIONID})
+        self.assertIn("couldn't be checked yet", output.getvalue())
+        self.assertNotIn("slow down", output.getvalue())
+        cookies, username = cli.load_session()
+        self.assertEqual((cookies["sessionid"], cookies["ds_user_id"], username),
+                         (self.SESSIONID, "1234567890", None))
+
+    def test_rejected_login_is_not_saved(self):
+        self.app.api.current_user = mock.Mock(side_effect=cli.SessionExpired("expired"))
+        with redirect_stdout(io.StringIO()), self.assertRaises(cli.CookieImportError):
+            self.app.finish_login({"sessionid": self.SESSIONID})
+        self.assertIsNone(cli.load_session())
+
+    def test_confirmed_login(self):
+        self.app.api.current_user = mock.Mock(return_value={"username": "me"})
+        with redirect_stdout(io.StringIO()) as output:
+            self.app.finish_login({"sessionid": self.SESSIONID})
+        self.assertIn("Logged in as @me.", output.getvalue())
+        self.assertEqual(cli.load_session()[1], "me")
 
 
 class MainTests(unittest.TestCase):

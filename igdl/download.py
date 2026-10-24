@@ -94,6 +94,10 @@ def _stamp(timestamp: int, with_time: bool) -> str:
     return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d_%H-%M-%S" if with_time else "%Y-%m-%d")
 
 
+def _post_stem(post: Post) -> str:
+    return f"{_stamp(post.taken_at, False)}_{safe_name(post.username, 'unknown')}_{post.shortcode}"
+
+
 def _extension(variant: Variant, kind: str) -> str:
     if kind == VIDEO:
         return ".mp4"
@@ -137,20 +141,20 @@ class Downloader:
         self._ffmpeg_tip_shown = False
 
     # ------------------------------------------------------------------ naming
-
-    def folder_for(self, post: Post) -> Path:
-        user_dir = self.output_dir / safe_name(post.username, "unknown")
-        if post.kind == "story":
-            return user_dir / "stories"
-        if post.kind == "highlight":
-            return user_dir / "highlights" / safe_name(post.title or post.reel_id, "highlight")
-        return user_dir
+    # Everything goes straight into the download folder. Names start with the date, so the folder
+    # sorts chronologically, followed by the account they came from.
 
     def stem_for(self, post: Post, item: MediaItem) -> str:
         if post.kind == "post":
-            stem = f"{_stamp(post.taken_at, False)}_{post.shortcode}"
+            stem = _post_stem(post)
             return f"{stem}_{item.position}" if len(post.items) > 1 else stem
-        return f"{_stamp(item.taken_at or post.taken_at, True)}_{item.media_id or item.position}"
+        when = _stamp(item.taken_at or post.taken_at, True)
+        user = safe_name(post.username, "unknown")
+        item_id = item.media_id or item.position
+        if post.kind == "highlight":
+            title = safe_name(post.title or post.reel_id, "highlight", max_length=40)
+            return f"{when}_{user}_highlight_{title}_{item_id}"
+        return f"{when}_{user}_story_{item_id}"
 
     # ------------------------------------------------------------------ choosing
 
@@ -203,7 +207,7 @@ class Downloader:
         if not items:
             return result
 
-        folder = self.folder_for(post)
+        folder = self.output_dir
         limit = int(options.quality) if options.quality.isdigit() else 0
         choices: dict[str, Choice] = {}
         if options.quality == "ask" and self.chooser is not None:
@@ -319,7 +323,7 @@ class Downloader:
         raise DownloadError(f"download failed ({last_error})")
 
     def _save_caption(self, post: Post, folder: Path) -> None:
-        path = folder / f"{_stamp(post.taken_at, False)}_{post.shortcode}.txt"
+        path = folder / f"{_post_stem(post)}.txt"
         if path.exists():
             return
         when = datetime.fromtimestamp(post.taken_at).strftime("%Y-%m-%d %H:%M") if post.taken_at else ""

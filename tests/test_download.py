@@ -61,18 +61,18 @@ class DownloaderTests(unittest.TestCase):
         return Post(kind, "some.user", list(items), shortcode="Cabc123XYZ_", taken_at=TAKEN_AT, caption="Hi!",
                     title="My trip", reel_id="1791")
 
-    def user_dir(self):
-        return Path(self.out.name) / "some.user"
+    def root(self):
+        return Path(self.out.name)
 
     def test_carousel_names_dates_and_skip_existing(self):
         result = self.downloader.download(self.post(self.photo(1), self.video(2)), DownloadOptions())
         date = datetime.fromtimestamp(TAKEN_AT).strftime("%Y-%m-%d")
-        photo_file = self.user_dir() / f"{date}_Cabc123XYZ__1.jpg"
-        video_file = self.user_dir() / f"{date}_Cabc123XYZ__2.mp4"
+        photo_file = self.root() / f"{date}_some.user_Cabc123XYZ__1.jpg"
+        video_file = self.root() / f"{date}_some.user_Cabc123XYZ__2.mp4"
         self.assertEqual(result.saved, [photo_file, video_file])
         self.assertEqual(photo_file.read_bytes(), b"\xff\xd8 big photo")
         self.assertEqual(int(photo_file.stat().st_mtime), TAKEN_AT)
-        self.assertFalse(list(self.user_dir().glob("*.part")))
+        self.assertEqual(sorted(p.name for p in self.root().iterdir()), [photo_file.name, video_file.name])
 
         again = self.downloader.download(self.post(self.photo(1), self.video(2)), DownloadOptions())
         self.assertEqual((again.saved, again.existing), ([], [photo_file, video_file]))
@@ -80,7 +80,7 @@ class DownloaderTests(unittest.TestCase):
     def test_single_item_has_no_position_suffix(self):
         result = self.downloader.download(self.post(self.photo(1)), DownloadOptions())
         date = datetime.fromtimestamp(TAKEN_AT).strftime("%Y-%m-%d")
-        self.assertEqual(result.saved[0].name, f"{date}_Cabc123XYZ_.jpg")
+        self.assertEqual(result.saved[0].name, f"{date}_some.user_Cabc123XYZ_.jpg")
 
     def test_media_filter(self):
         videos = self.downloader.download(self.post(self.photo(1), self.video(2)), DownloadOptions("videos"))
@@ -105,17 +105,17 @@ class DownloaderTests(unittest.TestCase):
         self.assertEqual(asked, [(PHOTO, 1)])
         self.assertTrue(result.saved[0].name.endswith("_640x800.jpg"))
 
-    def test_stories_and_highlights_folders(self):
+    def test_stories_and_highlights_also_go_in_the_main_folder(self):
         story = self.downloader.download(self.post(self.photo(1), kind="story"), DownloadOptions())
         stamp = datetime.fromtimestamp(TAKEN_AT).strftime("%Y-%m-%d_%H-%M-%S")
-        self.assertEqual(story.saved[0], self.user_dir() / "stories" / f"{stamp}_pk1.jpg")
+        self.assertEqual(story.saved[0], self.root() / f"{stamp}_some.user_story_pk1.jpg")
         highlight = self.downloader.download(self.post(self.photo(1), kind="highlight"), DownloadOptions())
-        self.assertEqual(highlight.saved[0], self.user_dir() / "highlights" / "My trip" / f"{stamp}_pk1.jpg")
+        self.assertEqual(highlight.saved[0], self.root() / f"{stamp}_some.user_highlight_My trip_pk1.jpg")
 
     def test_caption_file(self):
         self.downloader.download(self.post(self.photo(1)), DownloadOptions(save_captions=True))
         date = datetime.fromtimestamp(TAKEN_AT).strftime("%Y-%m-%d")
-        caption = (self.user_dir() / f"{date}_Cabc123XYZ_.txt").read_text(encoding="utf-8")
+        caption = (self.root() / f"{date}_some.user_Cabc123XYZ_.txt").read_text(encoding="utf-8")
         self.assertIn("https://www.instagram.com/p/Cabc123XYZ_/", caption)
         self.assertIn("Hi!", caption)
 

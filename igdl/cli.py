@@ -312,6 +312,8 @@ class App:
         total = DownloadResult()
         problems: list[tuple[str, str]] = []
         retry: list[str] = []  # links worth trying again later
+        # Logged out, Instagram sometimes limits by quietly returning nothing instead of saying so.
+        empty_in_a_row = 0
         for index, url in enumerate(urls, 1):
             print(f"\n[{index}/{len(urls)}] {url}")
             try:
@@ -325,6 +327,7 @@ class App:
                 if len(total.failed) > failed_before:
                     problems.append((url, "some files couldn't be downloaded"))
                     retry.append(url)
+                empty_in_a_row = 0
             except (RateLimited, SessionExpired, Checkpoint) as err:
                 print(f"  ERROR: {err}{hint_for(err)}")
                 problems.append((url, str(err)))
@@ -339,6 +342,15 @@ class App:
                 problems.append((url, str(err)))
                 if not isinstance(err, UnsupportedLink):
                     retry.append(url)
+                empty_in_a_row = empty_in_a_row + 1 if isinstance(err, NotFound) and not self.api.logged_in else 0
+                remaining = urls[index:]
+                if empty_in_a_row >= 2 and remaining:
+                    print("  Two posts in a row came back empty, which usually means Instagram is limiting "
+                          f"logged-out visitors. Stopping here; the remaining {len(remaining)} link(s) are kept "
+                          "for retrying. Logging in avoids this.")
+                    problems.extend((rest, "not attempted") for rest in remaining)
+                    retry += remaining
+                    break
         self.print_summary(total, problems, f"{len(urls)} link{'s' if len(urls) != 1 else ''}")
         if retry:
             self.offer_to_save_failed(retry)
@@ -573,8 +585,12 @@ class App:
             self.http.clear_cookies()
             raise CookieImportError("Instagram didn't accept this login. Log in to instagram.com in your browser "
                                     "again, then import it here.") from None
+        except RateLimited:
+            print("Instagram is limiting requests right now, so the login couldn't be checked yet. "
+                  "It's saved anyway and will be used for your downloads.")
+            username = None
         except InstagramError as err:
-            print(f"Couldn't confirm the login right now ({err}). Saving it anyway.")
+            print(f"Couldn't check the login right now ({err}). It's saved anyway.")
             username = None
         self.username = username
         path = save_session(self.http.instagram_cookies(), username)

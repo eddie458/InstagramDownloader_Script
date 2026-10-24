@@ -20,6 +20,8 @@ APP_ID = "936619743392459"
 ASBD_ID = "359341"
 # GraphQL document that instagram.com uses to load a post for logged-out visitors.
 POST_DOC_ID = "27128499623469141"
+# Instagram allows only a few logged-out requests in a short time, so those are spaced out more.
+LOGGED_OUT_DELAY = (15.0, 25.0)
 
 
 class InstagramError(Exception):
@@ -80,12 +82,16 @@ class InstagramAPI:
     def _throttle(self) -> None:
         """Space out requests the way a person browsing would, to stay clear of rate limits.
 
-        A few quick requests are fine; after that each one waits min_delay..max_delay seconds.
+        Logged in, a few quick requests are fine; after that each one waits min_delay..max_delay
+        seconds. Logged out, every request after the first waits at least LOGGED_OUT_DELAY.
         """
         now = time.monotonic()
         self._recent_calls = [t for t in self._recent_calls if now - t < 60]
         if self._recent_calls:
-            if len(self._recent_calls) >= 3:
+            if not self.logged_in:
+                gap = random.uniform(max(self.min_delay, LOGGED_OUT_DELAY[0]),
+                                     max(self.max_delay, LOGGED_OUT_DELAY[1]))
+            elif len(self._recent_calls) >= 3:
                 gap = random.uniform(self.min_delay, self.max_delay)
             else:
                 gap = random.uniform(min(1.0, self.min_delay), min(2.0, self.max_delay))
@@ -160,10 +166,10 @@ class InstagramAPI:
         if response.status == 429 or any(text in lowered for text in
                                           ("wait a few minutes", "rate limit", "feedback_required")):
             if self.logged_in:
-                raise RateLimited("Instagram is rate-limiting your account. Take a break (15 minutes or "
-                                  "more) and try again.")
+                raise RateLimited("Instagram is temporarily limiting requests, which happens after many "
+                                  "requests in a short time. Take a break (15 minutes or more) and try again.")
             raise RateLimited("Instagram is limiting logged-out visitors right now. Log in for reliable "
-                              "downloads, or try again in a few minutes.")
+                              "downloads, or try again later (it can take 15 minutes or more).")
         if response.status >= 500:
             raise InstagramError(f"Instagram is having problems right now (HTTP {response.status}). "
                                  "Try again later.")
@@ -218,8 +224,9 @@ class InstagramAPI:
             return items[0]
         if len(shortcode) > 28:
             raise LoginRequired("This post is from a private account. Log in with an account that follows it.")
-        raise NotFound("Post not found. It may have been deleted, or it's from a private account "
-                       "(log in with an account that follows it).")
+        # Instagram can give this same empty answer when it's quietly limiting logged-out visitors.
+        raise NotFound("Instagram didn't return this post. It may be deleted or from a private account, or "
+                       "Instagram may be limiting logged-out visitors right now; logging in usually fixes this.")
 
     def resolve_share_link(self, url: str) -> str:
         """Find out where an instagram.com/share/... link points to."""

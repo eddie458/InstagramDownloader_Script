@@ -87,18 +87,19 @@ don't clash with the full-quality download. To see what's available without down
 
 ## Where the files go
 
-The default download folder is `Downloads\Instagram`. You can change it in Settings.
+The default download folder is `Downloads\Instagram`. You can change it in Settings. Everything is saved
+directly in that one folder, with no subfolders. Each name starts with the date, so the folder sorts by
+date, followed by the account the file came from:
 
 ```
 Instagram/
-  <username>/
-    2024-05-01_C7abcDEF123.jpg              single photo or video
-    2024-05-01_C7abcDEF123_1.jpg            carousel item 1, 2, 3...
-    stories/2024-05-01_14-30-05_<id>.mp4
-    highlights/<highlight title>/2024-03-02_09-10-11_<id>.jpg
-  saved_posts_2024-05-01_143000.txt         saved-post links, one per line
-  saved_posts_2024-05-01_143000.csv         the same with user, type, date and caption
-  failed_links_2024-05-01_143512.txt        links to retry
+  2024-05-01_natgeo_C7abcDEF123.jpg                       single photo or video
+  2024-05-01_natgeo_C7abcDEF123_1.jpg                     carousel item 1, 2, 3...
+  2024-05-01_14-30-05_natgeo_story_<id>.mp4               story
+  2024-03-02_09-10-11_natgeo_highlight_Travel_<id>.jpg    highlight
+  saved_posts_2024-05-01_143000.txt                       saved-post links, one per line
+  saved_posts_2024-05-01_143000.csv                       the same with user, type, date and caption
+  failed_links_2024-05-01_143512.txt                      links to retry
 ```
 
 Files that already exist are skipped, so you can re-run the same list safely. The file dates are set to the
@@ -151,15 +152,22 @@ batch instead of pushing on. Avoid downloading thousands of posts in one go. Dow
 allowed to keep, such as your own posts or posts for personal offline viewing, and respect the creators'
 rights.
 
+When you're not logged in, Instagram allows only a few requests in a short time. So the script waits 15 to 25
+seconds between posts. If two posts in a row come back empty, it stops the batch and saves the remaining
+links for later, because that usually means Instagram has started limiting rather than that the posts are
+gone. Logging in avoids all of this.
+
 ## Troubleshooting
 
 | Message | What to do |
 |---|---|
-| *Instagram is limiting logged-out visitors* | Log in, or wait a few minutes. |
-| *Instagram is rate-limiting your account* | Take a break (15+ minutes), then retry the saved `failed_links_*.txt`. Consider a bigger delay in Settings. |
+| *Instagram is limiting logged-out visitors* | Log in. Otherwise try again later; it can take 15 minutes or more. |
+| *Instagram didn't return this post* (logged out) | It may be deleted or private, but often Instagram is quietly limiting logged-out visitors. Log in and try again. |
+| *Instagram is temporarily limiting requests* (logged in) | Take a break (15+ minutes), then retry the saved `failed_links_*.txt`. Consider a bigger delay in Settings. |
+| *The login couldn't be checked yet* | Instagram was limiting requests during login. The login is saved and will be used; nothing else to do. |
 | *Your Instagram session has expired* | Log in again (option 7). To keep going with public posts only, log out. |
 | *Instagram wants to verify your account* | Open instagram.com in your browser, complete the check, then log in here again. |
-| *Post not found* | The post was deleted, or it's from a private account you don't follow (or you're not logged in). |
+| *Not found* / *Not available* (logged in) | The post was deleted, or it's from a private account you don't follow. |
 | Video saved *without sound* | Install ffmpeg (see Requirements). |
 
 ## Development
